@@ -3,7 +3,8 @@ from importlib import import_module
 from fastapi import FastAPI, Request, Body
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from app.config import ROOT, META, MODULES, DB_PATH
+from app.config import ROOT, META, MODULES
+from app import config
 from app.errors import BusinessError
 from app.engine import evaluate
 from app import store
@@ -11,7 +12,7 @@ from app.archive import serialize
 
 @asynccontextmanager
 async def lifespan(app):
-    store.save(DB_PATH,evaluate())
+    store.save(config.DB_PATH,evaluate())
     yield
 app=FastAPI(title=META['title'],lifespan=lifespan)
 app.mount('/static',StaticFiles(directory=str(ROOT/'app/static')),name='static')
@@ -26,27 +27,29 @@ def health():
     return {'status':'ok','project':META['short']}
 @app.post('/api/runs')
 def create(payload:dict=Body(default={})):
-    return store.save(DB_PATH,evaluate(payload))
+    return store.save(config.DB_PATH,evaluate(payload))
 @app.post('/api/runs/{run_id}/rerun')
 def rerun(run_id:str):
-    previous=store.get(DB_PATH,run_id)
+    previous=store.get(config.DB_PATH,run_id)
     if 'input_snapshot' not in previous:
         raise BusinessError('INPUT_SNAPSHOT_MISSING','旧批缺少源快照，请重新导入')
-    return store.save(DB_PATH,evaluate({'dataset':previous['source']},snapshot=previous['input_snapshot']))
+    return store.save(config.DB_PATH,evaluate({'dataset':previous['source']},snapshot=previous['input_snapshot']))
 @app.get('/api/runs')
 def runs():
-    return store.history(DB_PATH)
+    return store.history(config.DB_PATH)
 @app.get('/api/runs/{run_id}')
 def run(run_id:str):
-    return store.get(DB_PATH,run_id)
+    return store.get(config.DB_PATH,run_id)
 @app.post('/api/runs/{run_id}/review')
 def review(run_id:str,payload:dict=Body(...)):
     revision=payload.get('revision')
     if not isinstance(revision,int) or revision<1: raise BusinessError('BAD_REVISION','版本号须为正整数')
-    return store.review(DB_PATH,run_id,revision)
+    return store.review(config.DB_PATH,run_id,revision)
 @app.get('/api/export/{run_id}')
 def export(run_id:str):
-    result=store.get(DB_PATH,run_id)
+    result=store.get(config.DB_PATH,run_id)
     return Response(serialize(result),media_type='application/zip',headers={'Content-Disposition':f'attachment; filename="{run_id}.zip"'})
 for key in MODULES:
     app.include_router(import_module(f'app.modules.{key}.handler').router)
+# 档案索引是独立于七模块流水线的跨批检索子系统，单独挂路由，不进入模块导航顺序。
+app.include_router(import_module('app.modules.registry.handler').router)

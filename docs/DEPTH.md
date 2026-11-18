@@ -13,6 +13,7 @@
 | M5 更正裁决 | 查看并执行更正裁决 | `POST /api/correction` | `app/modules/correction/rules.py` | `tests/test_correction.py` |
 | M6 应付对账 | 查看并执行应付对账 | `POST /api/reconcile` | `app/modules/reconcile/rules.py` | `tests/test_reconcile.py` |
 | M7 结算归档 | 查看并执行结算归档 | `POST /api/archive` | `app/modules/archive/rules.py` | `tests/test_archive.py` |
+| R1 档案索引 | 迁入旧封存并按票检索 | `POST /api/registry/ingest` | `app/modules/registry/legacy.py` | `tests/test_registry_service.py`、`tests/test_registry_api.py` |
 
 ## 陷阱登记
 
@@ -38,3 +39,14 @@
 ## 已知不覆盖
 
 无称重设备实时接入，采用现场导出文件。无支付执行，只生成可复核结算证据。
+
+## 档案索引陷阱（R1）
+
+| TRAP | 现象 | 本项目处理 | 处理位置 | 测试 |
+|---|---|---|---|---|
+| R-01 | 重算覆盖历史金额 | 重算只作只读旁证，差异入 drift 不回写 | `app/modules/registry/legacy.py` | `tests/test_registry_service.py::test_history_amount_never_rewritten_by_recompute` |
+| R-02 | 同批重复迁入产生多条索引 | 批号主键幂等，同内容 `created=false`，异内容 409 | `app/modules/registry/store.py` | `test_idempotent_same_blob_single_index` 等 |
+| R-03 | 证据不完整批次混入审计 | auditable 恒为 0，audit 视野 SQL 排除 | `app/modules/registry/store.py` | `test_incomplete_batches_never_enter_audit` |
+| R-04 | 入口未到时间即可检索 | open_at 与可注入时钟双重门控 | `app/modules/registry/service.py` | `test_timed_open_gates_search` |
+| R-05 | 发布失败改写旧版索引 | 单事务更新，失败整笔回滚 | `app/modules/registry/store.py` | `test_publish_failure_rolls_back_keeping_old_state` |
+| R-06 | 原始档案或隔离原因被误删 | vault BLOB 只增不改、无删除 API，隔离行逐字保留 | `app/modules/registry/store.py` | `test_vault_bytes_immutable`、`test_quarantine_reasons_preserved_verbatim` |

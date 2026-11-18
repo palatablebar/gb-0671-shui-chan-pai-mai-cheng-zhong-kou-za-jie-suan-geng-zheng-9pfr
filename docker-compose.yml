@@ -6,6 +6,7 @@ services:
       - "${PORT:-18240}:8000"
     environment:
       DB_PATH: /data/workbench.sqlite
+      REGISTRY_DB_PATH: /data/registry.sqlite
       TZ: Asia/Shanghai
     volumes:
       - workspace:/data

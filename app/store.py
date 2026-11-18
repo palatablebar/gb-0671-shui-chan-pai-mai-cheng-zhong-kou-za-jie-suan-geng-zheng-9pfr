@@ -1,8 +1,10 @@
 import sqlite3, json
 from pathlib import Path
+from app.config import DB_PATH
 from app.errors import BusinessError
 
-def connect(path):
+def connect(path=None):
+    path=path or DB_PATH
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     con=sqlite3.connect(path,timeout=15)
     con.row_factory=sqlite3.Row

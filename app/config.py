@@ -5,5 +5,6 @@ META = json.loads((ROOT / 'app/project.json').read_text())
 MODULES = META['keys']
 RULE_VERSION = '2026.11.17-r2'
 DB_PATH = os.environ.get('DB_PATH', '/data/workbench.sqlite')
+REGISTRY_DB_PATH = os.environ.get('REGISTRY_DB_PATH', '/data/registry.sqlite')
 SENTINELS = {'', '-', 'N/A', 'NULL', '未知'}
 MAX_BYTES = 2_000_000

@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="kpis">
+  <div class="kpi"><small>在索引批次</small><b>{{ entries|length }}</b></div>
+  <div class="kpi"><small>入口已开放</small><b>{{ open_count }}</b></div>
+  <div class="kpi"><small>可审计批次</small><b>{{ entries|selectattr('auditable')|list|length }}</b></div>
+  <div class="kpi"><small>证据缺口批次</small><b>{{ entries|rejectattr('auditable')|list|length }}</b></div>
+</div>
+
+<div class="grid">
+  <section class="panel primary-panel">
+    <div class="panel__head"><h2>批次索引</h2><span>{{ entries|length }} 批 · 时钟 {{ now }}</span></div>
+    <div class="scroll">
+      <table class="ledger">
+        <thead><tr>
+          <th>批号</th><th>迁入时间</th><th>封存时间</th><th>票（封存/复算）</th>
+          <th>历史应付 CNY</th><th>封存校验</th><th>缺口</th><th>金额漂移</th><th>状态</th><th>入口开放</th><th>操作</th>
+        </tr></thead>
+        <tbody>
+        {% for e in entries %}
+        <tr data-batch="{{ e.batch_id }}">
+          <td class="mono"><a href="/api/registry/entries/{{ e.batch_id }}" target="_blank">{{ e.batch_id }}</a></td>
+          <td>{{ e.ingested_at }}</td>
+          <td>{{ e.sealed_at or '—' }}</td>
+          <td>{{ e.evidence.tickets_archived }} / {{ e.evidence.tickets_recomputed }}</td>
+          <td class="num">{{ e.historical.total_amount or '—' }}</td>
+          <td>{% if e.evidence.seal_ok %}<span class="badge ok">哈希一致</span>{% else %}<span class="badge bad">哈希异常</span>{% endif %}</td>
+          <td>{% if e.gaps %}<span class="badge bad">{{ e.gaps|length }} 项</span>{% else %}<span class="badge ok">完整</span>{% endif %}</td>
+          <td>{% if e.drift %}<span class="badge warn">{{ e.drift|length }} 票</span>{% else %}<span class="badge ok">无</span>{% endif %}</td>
+          <td><span class="badge {% if e.auditable %}ok{% elif e.state=='待发布' %}neutral{% else %}warn{% endif %}">{{ e.state }}</span></td>
+          <td>{{ e.open_at or '未发布' }}</td>
+          <td>
+            {% if e.state=='待发布' %}
+            <button class="btn js-publish" data-id="{{ e.batch_id }}">立即发布</button>
+            <button class="btn js-publish-later" data-id="{{ e.batch_id }}">定时发布</button>
+            {% else %}
+            <a class="btn" href="/api/registry/entries/{{ e.batch_id }}/raw">原封存</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11">尚无迁入档案。从右栏迁入一份旧封存 zip（base64），或运行 <code>python3 -I scripts/make_legacy.py</code> 造样例。</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="panel__bar">
+      <label>票号检索 <input id="ticket-query" placeholder="按原票号查旧封存证据，如 00003"></label>
+      <label>视野
+        <select id="scope">
+          <option value="all">全部开放批次（含暂缓）</option>
+          <option value="audit">仅可审计结果</option>
+        </select>
+      </label>
+      <button id="ticket-search" class="btn primary">检索</button>
+    </div>
+    <div id="search-result" class="scroll"></div>
+  </section>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="panel__head"><h2>迁入旧封存</h2><span>保留原件·另建索引</span></div>
+      <p class="hint">重算仅作只读旁证，历史金额不回写；原件字节原样入库，不提供删除。</p>
+      <label>文件名 <input id="ingest-name" placeholder="legacy-batch-001.zip"></label>
+      <label>base64 封存内容
+        <textarea id="ingest-blob" rows="4" placeholder="粘贴 zip 的 base64，或用脚本批量迁入"></textarea>
+      </label>
+      <button id="ingest-btn" class="btn primary">迁入</button>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head"><h2>缺口清单</h2><span>不完整批次不进审计</span></div>
+      <div class="scroll">
+        <table class="ledger">
+          <thead><tr><th>批号</th><th>原因码</th><th>说明</th></tr></thead>
+          <tbody>
+          {% for e in entries if e.gaps %}
+            {% for g in e.gaps %}
+            <tr><td class="mono">{{ e.batch_id }}</td><td>{{ g.code }}</td><td>{{ g.detail }}</td></tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="3">当前无证据缺口。</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head"><h2>隔离原因（原件保留）</h2><span>{{ entries|map(attribute='quarantine')|map('length')|sum }} 行</span></div>
+      <div class="scroll">
+        <table class="ledger">
+          <thead><tr><th>批号</th><th>原始行</th><th>票号</th><th>原因码</th><th>原因</th></tr></thead>
+          <tbody>
+          {% for e in entries %}
+            {% for q in e.quarantine %}
+            <tr><td class="mono">{{ e.batch_id }}</td><td>{{ q.line }}</td><td>{{ q.ticket or '—' }}</td><td>{{ q.code }}</td><td>{{ q.detail }}</td></tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="5">暂无隔离记录。</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

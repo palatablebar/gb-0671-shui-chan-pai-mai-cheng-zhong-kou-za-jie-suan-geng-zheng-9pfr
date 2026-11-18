@@ -5,7 +5,9 @@ from app.errors import BusinessError
 import pytest
 
 def client(tmp_path,monkeypatch):
-    monkeypatch.setattr(main,'DB_PATH',str(tmp_path/'test.sqlite'))
+    from app import config
+    monkeypatch.setattr(config,'DB_PATH',str(tmp_path/'test.sqlite'))
+    monkeypatch.setattr(config,'REGISTRY_DB_PATH',str(tmp_path/'registry.sqlite'))
     return TestClient(main.app)
 def test_api_run_idempotent(tmp_path,monkeypatch):
     c=client(tmp_path,monkeypatch);a=c.post('/api/runs',json={}).json();b=c.post('/api/runs',json={}).json();assert a['manifest']['run_id']==b['manifest']['run_id'];assert len(c.get('/api/runs').json())==1
